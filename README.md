@@ -2,7 +2,10 @@
 
 This is a self-hosted FastAPI backend that emulates the TRMNL cloud so e-paper devices can fetch fresh images and metadata from your local network.
 
-![Obligatory screenshot](docs/playlist.png)
+![Main Screen](docs/main.png)
+![Device Details](docs/devices.png)
+![Server Logs](docs/logs.png)
+![Playlist Management](docs/playlist.png)
 
 It is loosely based on [a Flask implementation by @ohAnd](https://github.com/ohAnd/trmnlServer), rewritten (nearly) from scratch to use FastAPI, async I/O, and a plugin-driven architecture for rendering various charts and images, prioritizing greyscale output suitable for later firmware versions but allowing you to force 1-bit BMP for legacy devices on a per-item basis
 
