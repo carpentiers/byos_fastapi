@@ -1,6 +1,6 @@
 # BYOS TRMNL Server in FastAPI
 
-This is a self-hosted FastAPI backend that emulates the TRMNL cloud so e-paper devices can fetch fresh images and metadata from your local network.
+This is a self-hosted FastAPI backend that emulates the [TRMNL](https://usetrmnl.com/) cloud so e-paper devices can fetch fresh images and metadata from your local network.
 
 ![Main Screen](docs/main.png)
 ![Device Details](docs/devices.png)
