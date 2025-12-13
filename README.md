@@ -1,10 +1,10 @@
-# TRMNL Local Server
+# BYOS TRMNL Server in FastAPI
 
 This is a self-hosted FastAPI backend that emulates the TRMNL cloud so e-paper devices can fetch fresh images and metadata from your local network.
 
 ![Obligatory screenshot](docs/playlist.png)
 
-It is loosely based on a Flask implementation by [@ohAnd](https://github.com/ohAnd/trmnlServer), rewritten (nearly) from scratch to use FastAPI, async I/O, and a plugin-driven architecture for rendering various charts and images, prioritizing greyscale output suitable for later firmware versions but allowing you to force 1-bit BMP for legacy devices on a per-item basis
+It is loosely based on [a Flask implementation by @ohAnd](https://github.com/ohAnd/trmnlServer), rewritten (nearly) from scratch to use FastAPI, async I/O, and a plugin-driven architecture for rendering various charts and images, prioritizing greyscale output suitable for later firmware versions but allowing you to force 1-bit BMP for legacy devices on a per-item basis
 
 The server maintains device/playlists in SQLite, renders plugin-driven charts/photos into BMP/PNG assets, and exposes `/api/display` plus legacy-compatible endpoints expected by the firmware.
 
@@ -35,7 +35,7 @@ I am deploying this with `kata`, a Docker-based service manager I wrote, but any
 ## Running Locally
 
 ```bash
-git clone https://github.com/rcarmo/trmnlServer.git
+git clone https://github.com/rcarmo/python-fastapi-trmnl-server.git
 cd trmnlServer
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
