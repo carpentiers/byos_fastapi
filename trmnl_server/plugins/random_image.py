@@ -11,7 +11,8 @@ from .base import PhotographicPlugin, PluginOutput
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_IMAGE_ROOT = Path(os.environ.get('HOME', '~')).expanduser() / 'Pictures' / 'Samurai Jack'
+DEFAULT_IMAGE_ROOT = os.getenv('RANDOM_IMAGE_ROOT', Path(os.environ.get('HOME', '~')).expanduser() / 'Pictures')
+
 SUPPORTED_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.bmp', '.gif'}
 
 
