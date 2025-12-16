@@ -448,10 +448,42 @@ def convert_bmp_bytes_to_png(bmp_bytes: BytesIO) -> BytesIO:
     """
     bmp_bytes.seek(0)
     image = Image.open(bmp_bytes)
+    return BytesIO(_save_png_payload(image))
+
+
+def _save_png_payload(image: Image.Image) -> bytes:
     png_io = BytesIO()
-    image.save(png_io, format="PNG")
-    png_io.seek(0)
-    return png_io
+    image.save(png_io, format='PNG', optimize=True, compress_level=9)
+    return png_io.getvalue()
+
+
+def ensure_png_payload_under_budget(
+    png_bytes: bytes,
+    *,
+    levels: int = 4,
+    dither_mode: Optional[str] = None,
+    max_bytes: Optional[int] = None,
+    log_context: str = 'png'
+) -> bytes:
+    """Ensure an arbitrary PNG payload fits within the configured byte budget.
+
+    This is intended as a last-resort safety net (e.g., when serving PNGs) and
+    will re-encode under a palette budget when the payload exceeds max_bytes.
+    """
+    budget = int(max_bytes) if max_bytes is not None else int(getattr(config, 'PNG_MAX_BYTES', 0) or 0)
+    if budget <= 0:
+        return png_bytes
+    if len(png_bytes) <= budget:
+        return png_bytes
+
+    image = Image.open(BytesIO(png_bytes))
+    return _budgeted_grayscale_png_payload(
+        image,
+        requested_levels=max(2, int(levels)),
+        dither_mode=dither_mode,
+        max_bytes=budget,
+        log_context=log_context
+    )
 
 
 def convert_to_grayscale_levels(image: Image.Image, levels: int = 4) -> Image.Image:
@@ -724,6 +756,81 @@ def ensure_monochrome_bmp(image_blob: BytesIO, dither_mode: Optional[str] = None
     return corrected
 
 
+def _budgeted_grayscale_png_payload(
+    source: Image.Image,
+    *,
+    requested_levels: Optional[int],
+    dither_mode: Optional[str],
+    max_bytes: int,
+    log_context: str
+) -> bytes:
+    """Encode a grayscale PNG under the requested byte budget.
+
+    This always uses PNG optimization and maximum compression. If the encoded
+    result exceeds max_bytes, it progressively reduces the palette levels and
+    re-runs quantization/dithering at each step.
+    """
+    max_bytes = int(max_bytes)
+    if max_bytes <= 0:
+        return _save_png_payload(source)
+
+    base = source.convert('L') if source.mode != 'L' else source
+
+    if requested_levels is None:
+        payload = _save_png_payload(base)
+        if len(payload) <= max_bytes:
+            return payload
+        start_levels = 32
+        candidates = [32, 16, 8, 4, 2]
+        levels_tried = start_levels
+    else:
+        start_levels = max(2, int(requested_levels))
+        candidates = [start_levels, 32, 16, 8, 4, 2]
+        candidates = [level for level in candidates if 2 <= level <= start_levels]
+        levels_tried = start_levels
+
+    candidates_unique: List[int] = []
+    for level in candidates:
+        if level not in candidates_unique:
+            candidates_unique.append(level)
+    if candidates_unique and candidates_unique[-1] != 2:
+        candidates_unique.append(2)
+
+    last_payload: bytes = b''
+    last_level = 2
+    for level in candidates_unique:
+        last_level = level
+        if dither_mode:
+            quantized = apply_dithering(source, levels=level, mode=dither_mode)
+        else:
+            quantized = convert_to_grayscale_levels(base, levels=level)
+
+        palette, remap_table = _build_grayscale_palette(level)
+        indexed = quantized.point(remap_table, 'P')
+        indexed.putpalette(palette)
+        payload = _save_png_payload(indexed)
+        last_payload = payload
+        if len(payload) <= max_bytes:
+            if (requested_levels is None) or (level != levels_tried):
+                config.logger.info(
+                    "[png] %s: reduced grayscale levels to %s to fit %s bytes (got %s)",
+                    log_context,
+                    level,
+                    max_bytes,
+                    len(payload)
+                )
+            return payload
+
+    config.logger.warning(
+        "[png] %s: unable to fit under %s bytes (levels=%s, got %s)",
+        log_context,
+        max_bytes,
+        last_level,
+        len(last_payload)
+    )
+    return last_payload
+
+
 def save_display_assets(
     image: Image.Image,
     output_dir: str,
@@ -744,7 +851,15 @@ def save_display_assets(
         else:
             grayscale = convert_to_grayscale_levels(image, levels=levels)
     png_path = os.path.abspath(os.path.join(output_dir, f"{safe_name}.png"))
-    grayscale.save(png_path, format='PNG')
+    png_payload = _budgeted_grayscale_png_payload(
+        image,
+        requested_levels=grayscale_levels,
+        dither_mode=dither_mode,
+        max_bytes=config.PNG_MAX_BYTES,
+        log_context=f"{safe_name}.png"
+    )
+    with open(png_path, 'wb') as file:
+        file.write(png_payload)
 
     bmp_path = os.path.abspath(os.path.join(output_dir, f"{safe_name}.bmp"))
     if grayscale_levels is None:
@@ -759,7 +874,7 @@ def save_display_assets(
             file.write(bytes(bmp_bytes))
     else:
         buffer = BytesIO()
-        grayscale.save(buffer, format='PNG')
+        grayscale.save(buffer, format='PNG', optimize=True, compress_level=9)
         buffer.seek(0)
         mono_blob = ensure_monochrome_bmp(buffer, dither_mode=dither_mode)
         with open(bmp_path, 'wb') as file:
@@ -793,15 +908,14 @@ def generate_grayscale_png(image_blob: BytesIO, levels: int = 4) -> BytesIO:
     position = image_blob.tell()
     image_blob.seek(0)
     image = Image.open(image_blob)
-    quantized = convert_to_grayscale_levels(image, levels)
-    palette, remap_table = _build_grayscale_palette(levels)
-
-    indexed = quantized.point(remap_table, 'P')
-    indexed.putpalette(palette)
-
-    png_io = BytesIO()
-    indexed.save(png_io, format='PNG', optimize=True)
-    png_io.seek(0)
+    png_bytes = _budgeted_grayscale_png_payload(
+        image,
+        requested_levels=levels,
+        dither_mode=None,
+        max_bytes=config.PNG_MAX_BYTES,
+        log_context='generate_grayscale_png'
+    )
+    png_io = BytesIO(png_bytes)
     image_blob.seek(position)
     return png_io
 
@@ -818,15 +932,14 @@ def generate_dithered_grayscale_png(
     position = image_blob.tell()
     image_blob.seek(0)
     image = Image.open(image_blob)
-    dithered = apply_dithering(image, levels, mode=mode)
-    palette, remap_table = _build_grayscale_palette(levels)
-
-    indexed = dithered.point(remap_table, 'P')
-    indexed.putpalette(palette)
-
-    png_io = BytesIO()
-    indexed.save(png_io, format='PNG', optimize=True)
-    png_io.seek(0)
+    png_bytes = _budgeted_grayscale_png_payload(
+        image,
+        requested_levels=levels,
+        dither_mode=mode,
+        max_bytes=config.PNG_MAX_BYTES,
+        log_context='generate_dithered_grayscale_png'
+    )
+    png_io = BytesIO(png_bytes)
     image_blob.seek(position)
     return png_io
 

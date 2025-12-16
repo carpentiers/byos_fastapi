@@ -41,6 +41,9 @@ ASSETS_ROOT = 'web'
 STATIC_ROOT = 'web'
 GENERATED_ROOT = 'var/generated'
 
+# Hard limit for generated grayscale PNG assets (bytes).
+PNG_MAX_BYTES = 90000
+
 # Photographic plugin grading
 #
 # When enabled, photographic plugins apply additional histogram and shadow grading
@@ -127,6 +130,7 @@ def _apply_environment_overrides() -> None:
     global SERVER_PORT, ENABLE_SSL, SERVER_SCHEME
     global SETUP_API_KEY, SETUP_FRIENDLY_ID, SETUP_MESSAGE
     global DITHERING_MODE, ASSETS_ROOT, STATIC_ROOT, GENERATED_ROOT
+    global PNG_MAX_BYTES
     global EINK_TONE_POINTS, EINK_TONE_GAMMA
     global PHOTO_GRADING_ENABLED, CALIBRATION_PLUGIN_ENABLED
     _ENV_OVERRIDES.clear()
@@ -148,6 +152,7 @@ def _apply_environment_overrides() -> None:
     ASSETS_ROOT = _env_str('ASSETS_ROOT', 'web', 'assets_root')
     STATIC_ROOT = _env_str('STATIC_ROOT', 'web', 'static_root')
     GENERATED_ROOT = _env_str('GENERATED_ROOT', 'var/generated', 'generated_root')
+    PNG_MAX_BYTES = _env_int('PNG_MAX_BYTES', 90000, 'png_max_bytes')
     EINK_TONE_POINTS = _env_str('EINK_TONE_POINTS', default_eink_tone_points, 'eink_tone_points')
     EINK_TONE_GAMMA = _env_float('EINK_TONE_GAMMA', default_eink_tone_gamma, 'eink_tone_gamma')
     PHOTO_GRADING_ENABLED = _env_bool('PHOTO_GRADING_ENABLED', PHOTO_GRADING_ENABLED, 'photo_grading_enabled')

@@ -28,6 +28,14 @@ def _device_context_for_image_request(request: Request) -> tuple[str, dict]:
 
 def _binary_response(image_blob: BytesIO, media_type: str) -> Response:
     payload = image_blob.getvalue()
+    if media_type == 'image/png':
+        payload = utils.ensure_png_payload_under_budget(
+            payload,
+            levels=4,
+            dither_mode=config.DITHERING_MODE,
+            max_bytes=config.PNG_MAX_BYTES,
+            log_context='serve_png'
+        )
     headers = {'Content-Length': str(len(payload))}
     return Response(content=payload, media_type=media_type, headers=headers)
 
